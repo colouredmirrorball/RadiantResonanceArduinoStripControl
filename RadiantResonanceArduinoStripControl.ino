@@ -55,7 +55,7 @@
 // Actually send a bit to the string. We must to drop to asm to enusre that the complier does
 // not reorder things and make it so the delay happens in the wrong place.
 
-inline void sendBit(bool bitVal) {
+inline void sendBit(bool bitVal, unsigned char port, unsigned char pixelBit) {
 
   if (bitVal) {  // 0 bit
 
@@ -68,8 +68,8 @@ inline void sendBit(bool bitVal) {
       ".rept %[offCycles] \n\t"   // Execute NOPs to delay exactly the specified number of cycles
       "nop \n\t"
       ".endr \n\t" ::
-        [port] "I"(_SFR_IO_ADDR(PIXEL_PORT)),
-      [bit] "I"(PIXEL_BIT),
+        [port] "I"(_SFR_IO_ADDR(port)),
+      [bit] "I"(pixelBit),
       [onCycles] "I"(NS_TO_CYCLES(T1H) - 2),  // 1-bit width less overhead  for the actual bit setting, note that this delay could be longer and everything would still work
       [offCycles] "I"(NS_TO_CYCLES(T1L) - 2)  // Minimum interbit delay. Note that we probably don't need this at all since the loop overhead will be enough, but here for correctness
 
@@ -91,8 +91,8 @@ inline void sendBit(bool bitVal) {
       ".rept %[offCycles] \n\t"   // Execute NOPs to delay exactly the specified number of cycles
       "nop \n\t"
       ".endr \n\t" ::
-        [port] "I"(_SFR_IO_ADDR(PIXEL_PORT)),
-      [bit] "I"(PIXEL_BIT),
+        [port] "I"(_SFR_IO_ADDR(port)),
+      [bit] "I"(pixelBit),
       [onCycles] "I"(NS_TO_CYCLES(T0H) - 2),
       [offCycles] "I"(NS_TO_CYCLES(T0L) - 2)
 
@@ -105,11 +105,11 @@ inline void sendBit(bool bitVal) {
 }
 
 
-inline void sendByte(unsigned char byte) {
+inline void sendByte(unsigned char byte, unsigned char port, unsigned char pixelBit) {
 
   for (unsigned char bit = 0; bit < 8; bit++) {
 
-    sendBit(bitRead(byte, 7));  // Neopixel wants bit in highest-to-lowest order
+    sendBit(bitRead(byte, 7), port, pixelBit);  // Neopixel wants bit in highest-to-lowest order
     // so send highest bit (bit #7 in an 8-bit byte since they start at 0)
     byte <<= 1;  // and then shift left so bit 6 moves into 7, 5 moves into 6, etc
   }
@@ -132,13 +132,13 @@ void ledsetup() {
   bitSet(PIXEL_DDR, PIXEL_BIT);
 }
 
-unsigned char stripint = 255;
 
-inline void sendPixel(unsigned char r, unsigned char g, unsigned char b, unsigned char w) {
 
-  sendByte(g * stripint / 255);  // Neopixel wants colors in green then red then blue order
-  sendByte(r * stripint / 255);
-  sendByte(b * stripint / 255);
+inline void sendPixel(unsigned char r, unsigned char g, unsigned char b) {
+
+  sendByte(g, PORTD, 7);  // Neopixel wants colors in green then red then blue order
+  sendByte(r, PORTD, 7);
+  sendByte(b, PORTD, 7);
 }
 
 
@@ -155,7 +155,7 @@ void setup() {
   ledsetup();
 
   //Make the strip red to display the arduino is ready (optional)
-  showColor(255, 0, 0, 0);
+  showColor(255, 0, 0);
 }
 
 //The program variable keeps track of which effect is currently enabled
@@ -192,7 +192,7 @@ void loop() {
 
       case 'c':  //static colour
 
-        showColor(data1, data2, data3, data4);
+        showColor(data1, data2, data3);
 
         break;
 
@@ -202,8 +202,8 @@ void loop() {
           on = !on;
           prevTimeProgram = millis();
         }
-        if (on) showColor(data1, data2, data3, data4);
-        else showColor(0, 0, 0, 0);
+        if (on) showColor(data1, data2, data3);
+        else showColor(0, 0, 0);
 
         break;
 
@@ -216,7 +216,7 @@ void loop() {
         //Add your own effects here!
 
       default:
-        showColor(0, 0, 0, 0);
+        showColor(0, 0, 0);
         break;
     }
 
@@ -229,11 +229,11 @@ void loop() {
 
 // Display a single color on the whole string
 
-void showColor(unsigned char r, unsigned char g, unsigned char b, unsigned char w) {
+void showColor(unsigned char r, unsigned char g, unsigned char b) {
 
   cli();
   for (int p = 0; p < PIXELS; p++) {
-    sendPixel(r, g, b, w);
+    sendPixel(r, g, b);
   }
   sei();
   show();
@@ -241,18 +241,18 @@ void showColor(unsigned char r, unsigned char g, unsigned char b, unsigned char 
 
 // Fill the dots one after the other with a color
 // rewrite to lift the compare out of the loop
-void colorWipe(unsigned char r, unsigned char g, unsigned char b, unsigned char w, unsigned char wait) {
+void colorWipe(unsigned char r, unsigned char g, unsigned char b, unsigned char wait) {
   for (unsigned int i = 0; i < PIXELS; i += (PIXELS / 60)) {
 
     cli();
     unsigned int p = 0;
 
     while (p++ <= i) {
-      sendPixel(r, g, b, w);
+      sendPixel(r, g, b);
     }
 
     while (p++ <= PIXELS) {
-      sendPixel(0, 0, 0, 0);
+      sendPixel(0, 0, 0);
     }
 
     sei();
@@ -290,15 +290,15 @@ void rainbowStep() {
     switch (phase) {
 
       case 0:
-        sendPixel(~step, step, 0, 0);
+        sendPixel(~step, step, 0);
         break;
 
       case 1:
-        sendPixel(0, ~step, step, 0);
+        sendPixel(0, ~step, step);
         break;
 
       case 2:
-        sendPixel(step, 0, ~step, 0);
+        sendPixel(step, 0, ~step);
         break;
     }
 
